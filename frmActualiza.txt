@@ -1,391 +1,94 @@
 Option Explicit
 
-Const GWL_STYLE = -16
-Const WS_CAPTION = &HC00000
-'Private Declare Function GetWindowLong Lib "user32" Alias "GetWindowLongA" (ByVal hWnd As Long, ByVal nIndex As Long) As Long
-'Private Declare Function SetWindowLong Lib "user32" Alias "SetWindowLongA" (ByVal hWnd As Long, ByVal nIndex As Long, ByVal dwNewLong As Long) As Long
-'Private Declare Function DrawMenuBar Lib "user32" (ByVal hWnd As Long) As Long
-'Private Declare Function FindWindowA Lib "user32" (ByVal lpClassName As String, ByVal lpWindowName As String) As Long
+' =====================================================================
+' CONSTANTES DEL FORMULARIO
+' =====================================================================
+Private Const GWL_STYLE As Long = -16
+Private Const WS_CAPTION As Long = &HC00000
+Private Const COLOR_TITULO As Long = 92 * 65536 + 152 * 256 + 185
 
+' Variables del formulario
 Dim mdOriginX As Double
 Dim mdOriginY As Double
 
+' =====================================================================
+' CLASE DE OPTIMIZACIÓN PARA EXCEL
+' =====================================================================
+Private Type ExcelState
+    Calculation As XlCalculation
+    ScreenUpdating As Boolean
+    EnableEvents As Boolean
+    DisplayAlerts As Boolean
+End Type
+
+Private Function SaveExcelState() As ExcelState
+    With SaveExcelState
+        .Calculation = Application.Calculation
+        .ScreenUpdating = Application.ScreenUpdating
+        .EnableEvents = Application.EnableEvents
+        .DisplayAlerts = Application.DisplayAlerts
+    End With
+End Function
+
+Private Sub OptimizeExcelPerformance()
+    With Application
+        .Calculation = xlCalculationManual
+        .ScreenUpdating = False
+        .EnableEvents = False
+        .DisplayAlerts = False
+    End With
+End Sub
+
+Private Sub RestoreExcelState(state As ExcelState)
+    With Application
+        .Calculation = state.Calculation
+        .ScreenUpdating = state.ScreenUpdating
+        .EnableEvents = state.EnableEvents
+        .DisplayAlerts = state.DisplayAlerts
+    End With
+End Sub
+
+' =====================================================================
+' EVENTOS DEL FORMULARIO
+' =====================================================================
 Private Sub btn_Salir_Click()
-    
     Unload Me
-    
 End Sub
 
-Private Sub lbl_Actualizar_Click()
-    
-    Dim vLstRen As Long
-    Dim vPlan As String
-    Dim rutaArchivos  As String
-    Dim vArchivo  As String
-    Dim ultimaFila As Long
-    Dim rutaCompleta As String
-
-    On Error GoTo MDE
-    
-    rutaArchivos = ThisWorkbook.Sheets("Macro").Range("B1").Value
-    
-    vPlan = ActiveWorkbook.Name
-    Application.Calculation = xlCalculationManual
-' === Flex Plan - Selección de hoja solamente ===
-' === Flex Plan - Selección de hoja solamente ===
-If Me.chk_FlexPlan.Value Then
-
-    Dim vFlexPlan As String
-    Dim hojaSeleccionada As String
-    Dim frm_HojaFlex As New frm_SeleccionDeHojas
-
-    Me.img_PalomaFlexPlan.Visible = True
-    Me.Repaint
-
-  
-End If
-
-    
-If Me.chk_Ordenes.Value Then
-    On Error GoTo errorOrdenstats
-
-    Dim wsOrdenes As Worksheet
-    Set wsOrdenes = Sheets("Orderstats")
-    wsOrdenes.Visible = True
-    wsOrdenes.Activate
-    Me.img_Error_OrderStats.Visible = False
-
-    vArchivo = buscaArchivo("Ordenes")
-    rutaCompleta = rutaArchivos & vArchivo
-
-    If Dir(rutaCompleta) <> "" Then
-
-        If wsOrdenes.AutoFilterMode Then wsOrdenes.AutoFilterMode = False
-        wsOrdenes.Range("A2:L1048576").ClearContents
-
-        Dim fecha As String
-        Dim anio As Integer, mes As Integer, dia As Integer
-        Dim fechaValida As Boolean: fechaValida = True
-        Dim testFecha As Date
-
-        fecha = Trim(txtFechaFinal.Text)
-
-        ' Validar formato aaaammdd
-        If Len(fecha) = 8 And IsNumeric(fecha) Then
-            anio = CInt(Left(fecha, 4))
-            mes = CInt(Mid(fecha, 5, 2))
-            dia = CInt(Right(fecha, 2))
-
-            If mes >= 1 And mes <= 12 And dia >= 1 And dia <= 31 Then
-                On Error Resume Next
-                testFecha = DateSerial(anio, mes, dia)
-                If Err.Number <> 0 Then
-                    fechaValida = False
-                    Err.Clear
-                End If
-                On Error GoTo 0
-            Else
-                fechaValida = False
-            End If
-        Else
-            fechaValida = False
-        End If
-
-        If Not fechaValida Then GoTo errorOrdenstats
-
-        ' ? Fecha válida, continuar con carga
-        ' Call traeInformacionOrdenes(vPlan, fecha)
-        
-        Call CargarOrderStat_DesdeUNC_Hasta(vPlan, fecha)
-        Workbooks(vPlan).Activate
-        quitarEspacios "C"
-        NumeroAValor "C", "2"
-
-        With wsOrdenes
-            .Range("A1").Value = "CUST. CD."
-            .Range("B1").Value = "S/T"
-            .Range("C1").Value = "PARTNO"
-            .Range("D1").Value = "ETD"
-            .Range("E1").Value = "ETA"
-            .Range("F1").Value = "QUANTITY"
-            .Range("G1").Value = "SHIPPING QTY"
-            .Range("H1").Value = "Remain1"
-            .Range("I1").Value = "CUST. PO"
-            .Range("J1").Value = "ORDER FLG"
-            .Range("K1").Value = "Date"
-            .Range("L1").Value = "Validacion"
-        End With
-
-        ultimaFila = wsOrdenes.Cells(wsOrdenes.Rows.Count, "C").End(xlUp).Row
-
-If ultimaFila > 1 Then
-    ' 1) Asegura que D sea fecha real
-    ForzarFechaEnColumna wsOrdenes, "D", ultimaFila
-
-    ' 2) Ordena por C (asc) y luego por D (asc)
-    With wsOrdenes
-        Dim rngDatos As Range
-        Set rngDatos = .Range("A1:L" & ultimaFila)
-        rngDatos.Sort _
-            Key1:=.Range("C1"), Order1:=xlAscending, _
-            Key2:=.Range("D1"), Order2:=xlAscending, _
-            Header:=xlYes, Orientation:=xlTopToBottom
-    End With
-End If
-
-
-        If ultimaFila > 1 Then
-     
-         
-                 
-                
-        Else
-            MsgBox "La tabla de Órdenes no tiene datos suficientes.", vbExclamation
-        End If
-        
-        
-        
-
-
-        Me.img_PalomaOrdenes.Visible = True
-        Me.Repaint
-        GoTo continuarOrdenstats
-
-    Else
-        MsgBox "No se encontró el archivo de Órdenes.", vbInformation
-        GoTo errorOrdenstats
-    End If
-
-errorOrdenstats:
-    Me.img_PalomaOrdenes.Visible = False
-    Me.img_Error_OrderStats.Visible = True
-    Resume continuarOrdenstats
-
-continuarOrdenstats:
-End If
-   
-   If Me.chk_InvLocWIP.Value Then
-        Sheets("WIP").Visible = True
-        Sheets("WIP").Activate
-        vArchivo = buscaArchivo("InvLocWIP")
-        If Dir(rutaArchivos & vArchivo) <> "" Then
-            If ActiveSheet.AutoFilterMode Then ActiveSheet.AutoFilterMode = False
-            Range("A2:I1048576").ClearContents
-                'queryInvLocWip
-                traeInformacionInvLocWIP vPlan
-                Workbooks(vPlan).Activate
-               
-                vLstRen = Range("A65536").End(xlUp).Row
-                Me.img_PalomaInvLocWIP.Visible = True
-                Me.Repaint
-           '     Inv Location    Box Unit    Part#   Inj.Date Min    Dept    Type    Flag Ord
-
-            Range("A1").Value = "Inv Location"
-            Range("B1").Value = "Box Unit"
-            Range("C1").Value = "Part#"
-            Range("D1").Value = "Inj.Date Min"
-            Range("E1").Value = "Dept"
-            Range("F1").Value = "Type"
-            Range("G1").Value = "Flg/Ord"
-            Range("H1").Value = "Inv Confiable"
-                Range("H2").Formula = "=IF(LEFT(A2,1)=""H"",0,IF(LEFT(A2,3)=""60V"",0,IF(LEFT(A2,3)=""EPA"",0,IF(AND(A2>=""EXC50"",A2<=""EXC99""),0,(IF(AND(LEFT(A2,2)=""CA"",I2<(TODAY()-1)),0,B2))))))"
-
-            
-            Range("I1").Value = "inv Date"
-                'Range("I2").Formula = "=IF(LEFT(A2,4)=""SORT"",B2,VALUE(0))"
-                Range("I2").Formula = "=+DATE(LEFT(D2,4),MID(D2,5,2),MID(D2,7,2))"
-            
-          
-            vLstRen = Range("A65536").End(xlUp).Row
-            If vLstRen > 2 Then
-                Range("H2:I2").AutoFill Destination:=Range("H2:I" & vLstRen), Type:=xlFillDefault
-            End If
-        Else
-            MsgBox "La tabla de InvLocWIP no existe", vbInformation
-        End If
-    End If
-
-  
-   
-    
-If Me.chk_LoadFactor.Value Then
-    Sheets("Load Factor").Visible = True
-    Sheets("Load Factor").Activate
-    vArchivo = buscaArchivo("LoadFactor")
-
-    If ActiveSheet.AutoFilterMode Then ActiveSheet.AutoFilterMode = False
-    Range("A1:AH1048576").ClearContents
-
-    ' Ejecutar macro de carga
-    TraeInformacionLoadFactor vPlan
-    Workbooks(vPlan).Activate
-    QuitarEspaciosHoja
-    NumeroAValor "A", "2"
-
-    Me.img_PalomaLoadFactor.Visible = True
-    Me.Repaint
-
-    ' Encabezados
-    Range("A1").Value = "PartNo"
-    Range("B1").Value = "CONTROL"
-    Range("C1").Value = "DIE"
-    Range("D1").Value = "Dep"
-    Range("E1").Value = "Group Code"
-    Range("F1").Value = "Eng Lev"
-    Range("G1").Value = "Std Cav"
-    Range("H1").Value = "Act Cav"
-    Range("I1").Value = "Cycle Time"
-    Range("J1").Value = "Piece Weight"
-    Range("K1").Value = "Shot Weight"
-    Range("L1").Value = "Pcs/Hour"
-    Range("M1").Value = "Capacidad"
-            Range("M2").Formula = "=IFNA(IF(LEFT(D2,1)=""N"",L2*19.83*7,IFS(LEFT(D2,1)=""F"", (3600/I2)*G2*24*7*0.9, LEFT(D2,1)=""S"", (3600/I2)*G2*24*7*0.9, LEFT(D2,1)=""J"", (3600/I2)*G2*24*7*0.9)),0)"
-    Range("N1").Value = "Ensamble"
-        Range("N2").Formula = "=IF(LEFT(A2,2)=""72"",IF(COUNTIF(B:B,B2)>1,""COMPARTE"","" ""),""-"")"
-    ' Última fila con datos
-    vLstRen = Range("A65536").End(xlUp).Row
-
-    ' Aplicar fórmulas
-    If vLstRen > 2 Then
-        Range("M2:N2").AutoFill Destination:=Range("M2:N" & vLstRen), Type:=xlFillDefault
-    End If
-
-    ' Ordenar por columna C (DIE)
-    With Sheets("Load Factor").Sort
-        .SortFields.Clear
-        .SortFields.Add Key:=Range("C2:C" & vLstRen), _
-            SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
-        .SetRange Range("A1:N" & vLstRen)
-        .Header = xlYes
-        .MatchCase = False
-        .Orientation = xlTopToBottom
-        .Apply
-    End With
-
-End If
-
-    
-    If Me.chk_ItemMaster.Value Then
-        Sheets("Item Master").Visible = True
-        Sheets("Item Master").Activate
-        vArchivo = buscaArchivo("ItemMaster")
-        If Dir(rutaArchivos & vArchivo) <> "" Then
-            If ActiveSheet.AutoFilterMode Then ActiveSheet.AutoFilterMode = False
-            Range("A1:J1048576").ClearContents
-                'queryItemMaster
-                traeInformacionItemMaster vPlan
-                Workbooks(vPlan).Activate
-                Me.img_PalomaItemMaster.Visible = True
-                Me.Repaint
-            Range("A1").Value = "PartNo"
-            Range("B1").Value = "Description"
-            Range("C1").Value = "Dep"
-            Range("D1").Value = "Line"
-            Range("E1").Value = "PLN"
-            Range("F1").Value = "Type"
-            Range("G1").Value = "Flg/Ord"
-            Range("H1").Value = "Unit/Bag"
-            Range("I1").Value = "Unit/Poly"
-            Range("J1").Value = "Unit/Box"
-        Else
-            MsgBox "La tabla de ItemMaster no existe", vbInformation
-        End If
-        
-       
-    End If
-  
-    
-    If Me.chk_InventarioFG.Value Then
-        Sheets("Inventario FG").Visible = True
-        Sheets("Inventario FG").Activate
-        vArchivo = buscaArchivo("InvLocWIPFG")
-        If Dir(rutaArchivos & vArchivo) <> "" Then
-            If ActiveSheet.AutoFilterMode Then ActiveSheet.AutoFilterMode = False
-            Range("A2:O1048576").ClearContents
-                'queryInvLocWip
-                traeInformacionInventarioFG vPlan
-                Workbooks(vPlan).Activate
-                
-                Me.img_PalomaInventarioFG.Visible = True
-                Me.Repaint
-           '     Inv Location    Box Unit    Part#   Inj.Date Min    Dept    Type    Flag Ord
-
-                
-          
-            vLstRen = Range("A65536").End(xlUp).Row
-            If vLstRen > 2 Then
-               ' Range("H2:I2").AutoFill Destination:=Range("H2:I" & vLstRen), Type:=xlFillDefault
-            End If
-        Else
-            MsgBox "La tabla de InvLocWIPFGno existe", vbInformation
-        End If
-    End If
-
-If Me.chk_Capacidades.Value Then
-    Dim wb As Workbook
-    Dim wsCap As Worksheet
-
-
-    ' === 1) Tomar el libro ACTIVO (no el que contiene el código) ===
-    If Application.Workbooks.Count = 0 Then
-        MsgBox "No hay libros abiertos.", vbExclamation
-        Exit Sub
-    End If
-    Set wb = Application.ActiveWorkbook   ' <- clave para tu síntoma
-    vPlan = wb.Name
-
-    ' === 2) Asegurar que la estructura del libro permita agregar hojas ===
-    If wb.ProtectStructure Then
-        MsgBox "El libro está protegido (estructura). Desprotégelo para crear hojas.", vbExclamation
-        Exit Sub
-    End If
-
-    ' === 3) Obtener o crear la hoja "Capacidades" de forma segura ===
-    Set wsCap = GetOrCreateSheet(wb, "Capacidades")  ' maneja VeryHidden y conflictos de nombre
-
-    ' === 4) Limpiar sin depender de ActiveSheet ===
-    With wsCap
-        If .Visible <> xlSheetVisible Then .Visible = xlSheetVisible
-        If .AutoFilterMode Then .AutoFilterMode = False
-        .Range("A2:O" & .Rows.Count).ClearContents
-        .Activate
-    End With
-
-    ' === 5) Ejecutar la carga apuntando al libro correcto ===
-    Call traeInformacionCapacidades(vPlan)
-
-    ' === 6) Marcar paloma ===
-    Me.img_PalomaCapacidades.Visible = True
-End If
-
-
-
-
-    MsgBox "Proceso Terminado Exitosamente", vbInformation
-    
+Private Sub lbl_Salir_Click()
     Unload Me
-    
-    Application.Calculation = xlCalculationAutomatic
-    
-    Exit Sub
-    
-MDE:
-    MsgBox "Hubo un error en la aplicacion: " & Err.Description, vbInformation
-    Application.Calculation = xlCalculationAutomatic
-    
 End Sub
 
+Private Sub UserForm_Initialize()
+    Me.lbl_Titulo.BackColor = RGB(92, 152, 185)
+End Sub
+
+' =====================================================================
+' MOVIMIENTO DEL FORMULARIO
+' =====================================================================
+Private Sub lbl_Titulo_MouseDown(ByVal Button As Integer, ByVal Shift As Integer, ByVal X As Single, ByVal y As Single)
+    mdOriginX = X
+    mdOriginY = y
+End Sub
+
+Private Sub lbl_Titulo_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal X As Single, ByVal y As Single)
+    If Button And 1 Then
+        Me.Left = Me.Left + (X - mdOriginX)
+        Me.Top = Me.Top + (y - mdOriginY)
+    End If
+End Sub
+
+' =====================================================================
+' SELECCIÓN DE ARCHIVO FLEX PLAN
+' =====================================================================
 Private Sub lbl_FlexPlan_Click()
-    Dim f As Object
-    Dim varFile As Variant
-    Dim getFileName As String
-    Dim vWkSc As String
-    
+    Dim f As Object, varFile As Variant, getFileName As String
+
     Set f = Application.FileDialog(3)
     f.AllowMultiSelect = False
     f.Title = "Seleccionar FlexPlan"
     f.InitialFileName = "\\Yazaki.local\na\elcom\chihuahua\Area_General\Materiales\Archivos Macro PCD\Pruebas\Extractor\YCC Flex Planning.xlsx"
-        
+
     If f.Show = True Then
         For Each varFile In f.SelectedItems
             getFileName = varFile
@@ -396,53 +99,433 @@ Private Sub lbl_FlexPlan_Click()
     End If
 End Sub
 
-Private Sub lbl_Salir_Click()
-    
-    Unload Me
-    
-End Sub
+' =====================================================================
+' PROCESO PRINCIPAL DE ACTUALIZACIÓN - OPTIMIZADO
+' =====================================================================
+Private Sub lbl_Actualizar_Click()
+    Dim state As ExcelState
+    Dim vPlan As String
+    Dim rutaArchivos As String
 
+    On Error GoTo ErrorHandler
 
-Private Sub lbl_Titulo_MouseDown(ByVal Button As Integer, ByVal Shift As Integer, ByVal X As Single, ByVal y As Single)
-    
-    mdOriginX = X
-    mdOriginY = y
+    state = SaveExcelState()
+    OptimizeExcelPerformance
 
-End Sub
+    ' Obtener configuración
+    rutaArchivos = ThisWorkbook.Sheets("Macro").Range("B1").Value
+    vPlan = ActiveWorkbook.Name
 
-Private Sub lbl_Titulo_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal X As Single, ByVal y As Single)
-    
-    If Button And 1 Then
-        Me.Left = Me.Left + (X - mdOriginX)
-        Me.Top = Me.Top + (y - mdOriginY)
+    ' Procesar cada sección seleccionada
+    If Me.chk_FlexPlan.Value Then
+        ProcesarFlexPlan
     End If
 
+    If Me.chk_Ordenes.Value Then
+        ProcesarOrdenes vPlan, rutaArchivos
+    End If
+
+    If Me.chk_InvLocWIP.Value Then
+        ProcesarInvLocWIP vPlan, rutaArchivos
+    End If
+
+    If Me.chk_LoadFactor.Value Then
+        ProcesarLoadFactor vPlan, rutaArchivos
+    End If
+
+    If Me.chk_ItemMaster.Value Then
+        ProcesarItemMaster vPlan, rutaArchivos
+    End If
+
+    If Me.chk_InventarioFG.Value Then
+        ProcesarInventarioFG vPlan, rutaArchivos
+    End If
+
+    If Me.chk_Capacidades.Value Then
+        ProcesarCapacidades vPlan
+    End If
+
+    ' Finalizar
+    MsgBox "Proceso Terminado Exitosamente", vbInformation
+    Unload Me
+
+    RestoreExcelState state
+    Exit Sub
+
+ErrorHandler:
+    RestoreExcelState state
+    MsgBox "Hubo un error en la aplicación: " & Err.Description, vbCritical
 End Sub
 
-Private Sub UserForm_Initialize()
-         
-    Me.lbl_Titulo.BackColor = RGB(92, 152, 185)
-    
+' =====================================================================
+' PROCESAR FLEX PLAN
+' =====================================================================
+Private Sub ProcesarFlexPlan()
+    On Error Resume Next
+    Me.img_PalomaFlexPlan.Visible = True
+    Me.Repaint
+    On Error GoTo 0
 End Sub
 
+' =====================================================================
+' PROCESAR ÓRDENES - OPTIMIZADO
+' =====================================================================
+Private Sub ProcesarOrdenes(vPlan As String, rutaArchivos As String)
+    On Error GoTo ErrorHandler
+
+    Dim wsOrdenes As Worksheet
+    Dim vArchivo As String, rutaCompleta As String
+    Dim fecha As String, ultimaFila As Long
+
+    Set wsOrdenes = Sheets("Orderstats")
+    wsOrdenes.Visible = True
+    wsOrdenes.Activate
+    Me.img_Error_OrderStats.Visible = False
+
+    vArchivo = buscaArchivo("Ordenes")
+    rutaCompleta = rutaArchivos & vArchivo
+
+    If Dir(rutaCompleta) = "" Then
+        MsgBox "No se encontró el archivo de Órdenes.", vbInformation
+        GoTo ErrorHandler
+    End If
+
+    ' Validar fecha
+    fecha = Trim$(txtFechaFinal.Text)
+    If Not ValidarFormatoFecha(fecha) Then
+        GoTo ErrorHandler
+    End If
+
+    ' Limpiar hoja
+    If wsOrdenes.AutoFilterMode Then wsOrdenes.AutoFilterMode = False
+    wsOrdenes.Range("A2:L1048576").ClearContents
+
+    ' Cargar datos
+    Call CargarOrderStat_DesdeUNC_Hasta(vPlan, fecha)
+    Workbooks(vPlan).Activate
+
+    ' Configurar encabezados
+    With wsOrdenes
+        .Range("A1").Value = "CUST. CD."
+        .Range("B1").Value = "S/T"
+        .Range("C1").Value = "PARTNO"
+        .Range("D1").Value = "ETD"
+        .Range("E1").Value = "ETA"
+        .Range("F1").Value = "QUANTITY"
+        .Range("G1").Value = "SHIPPING QTY"
+        .Range("H1").Value = "Remain1"
+        .Range("I1").Value = "CUST. PO"
+        .Range("J1").Value = "ORDER FLG"
+        .Range("K1").Value = "Date"
+        .Range("L1").Value = "Validacion"
+    End With
+
+    ultimaFila = wsOrdenes.Cells(wsOrdenes.Rows.Count, "C").End(xlUp).Row
+
+    If ultimaFila > 1 Then
+        ForzarFechaEnColumna wsOrdenes, "D", ultimaFila
+
+        ' Ordenar datos
+        With wsOrdenes
+            Dim rngDatos As Range
+            Set rngDatos = .Range("A1:L" & ultimaFila)
+            rngDatos.Sort _
+                Key1:=.Range("C1"), Order1:=xlAscending, _
+                Key2:=.Range("D1"), Order2:=xlAscending, _
+                Header:=xlYes, Orientation:=xlTopToBottom
+        End With
+    Else
+        MsgBox "La tabla de Órdenes no tiene datos suficientes.", vbExclamation
+    End If
+
+    Me.img_PalomaOrdenes.Visible = True
+    Me.Repaint
+    Exit Sub
+
+ErrorHandler:
+    Me.img_PalomaOrdenes.Visible = False
+    Me.img_Error_OrderStats.Visible = True
+End Sub
+
+Private Function ValidarFormatoFecha(ByVal fecha As String) As Boolean
+    Dim anio As Integer, mes As Integer, dia As Integer
+    Dim testFecha As Date
+
+    On Error GoTo ErrorValidacion
+
+    If Len(fecha) <> 8 Or Not IsNumeric(fecha) Then GoTo ErrorValidacion
+
+    anio = CInt(Left$(fecha, 4))
+    mes = CInt(Mid$(fecha, 5, 2))
+    dia = CInt(Right$(fecha, 2))
+
+    If mes < 1 Or mes > 12 Or dia < 1 Or dia > 31 Then GoTo ErrorValidacion
+
+    testFecha = DateSerial(anio, mes, dia)
+    ValidarFormatoFecha = True
+    Exit Function
+
+ErrorValidacion:
+    ValidarFormatoFecha = False
+End Function
+
+' =====================================================================
+' PROCESAR INV LOC WIP - OPTIMIZADO
+' =====================================================================
+Private Sub ProcesarInvLocWIP(vPlan As String, rutaArchivos As String)
+    On Error GoTo ErrorHandler
+
+    Dim wsWIP As Worksheet
+    Dim vArchivo As String, vLstRen As Long
+
+    Set wsWIP = Sheets("WIP")
+    wsWIP.Visible = True
+    wsWIP.Activate
+
+    vArchivo = buscaArchivo("InvLocWIP")
+    If Dir(rutaArchivos & vArchivo) = "" Then
+        MsgBox "La tabla de InvLocWIP no existe", vbInformation
+        Exit Sub
+    End If
+
+    If wsWIP.AutoFilterMode Then wsWIP.AutoFilterMode = False
+    wsWIP.Range("A2:I1048576").ClearContents
+
+    Call traeInformacionInvLocWIP(vPlan)
+    Workbooks(vPlan).Activate
+
+    ' Configurar encabezados
+    With wsWIP
+        .Range("A1").Value = "Inv Location"
+        .Range("B1").Value = "Box Unit"
+        .Range("C1").Value = "Part#"
+        .Range("D1").Value = "Inj.Date Min"
+        .Range("E1").Value = "Dept"
+        .Range("F1").Value = "Type"
+        .Range("G1").Value = "Flg/Ord"
+        .Range("H1").Value = "Inv Confiable"
+        .Range("H2").Formula = "=IF(LEFT(A2,1)=""H"",0,IF(LEFT(A2,3)=""60V"",0,IF(LEFT(A2,3)=""EPA"",0,IF(AND(A2>=""EXC50"",A2<=""EXC99""),0,(IF(AND(LEFT(A2,2)=""CA"",I2<(TODAY()-1)),0,B2))))))"
+        .Range("I1").Value = "inv Date"
+        .Range("I2").Formula = "=+DATE(LEFT(D2,4),MID(D2,5,2),MID(D2,7,2))"
+    End With
+
+    vLstRen = wsWIP.Cells(wsWIP.Rows.Count, "A").End(xlUp).Row
+    If vLstRen > 2 Then
+        wsWIP.Range("H2:I2").AutoFill Destination:=wsWIP.Range("H2:I" & vLstRen), Type:=xlFillDefault
+    End If
+
+    Me.img_PalomaInvLocWIP.Visible = True
+    Me.Repaint
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Error en InvLocWIP: " & Err.Description, vbCritical
+End Sub
+
+' =====================================================================
+' PROCESAR LOAD FACTOR - OPTIMIZADO
+' =====================================================================
+Private Sub ProcesarLoadFactor(vPlan As String, rutaArchivos As String)
+    On Error GoTo ErrorHandler
+
+    Dim wsLF As Worksheet
+    Dim vArchivo As String, vLstRen As Long
+
+    Set wsLF = Sheets("Load Factor")
+    wsLF.Visible = True
+    wsLF.Activate
+
+    vArchivo = buscaArchivo("LoadFactor")
+    If wsLF.AutoFilterMode Then wsLF.AutoFilterMode = False
+    wsLF.Range("A1:AH1048576").ClearContents
+
+    Call TraeInformacionLoadFactor(vPlan)
+    Workbooks(vPlan).Activate
+
+    ' Configurar encabezados
+    With wsLF
+        .Range("A1").Value = "PartNo"
+        .Range("B1").Value = "CONTROL"
+        .Range("C1").Value = "DIE"
+        .Range("D1").Value = "Dep"
+        .Range("E1").Value = "Group Code"
+        .Range("F1").Value = "Eng Lev"
+        .Range("G1").Value = "Std Cav"
+        .Range("H1").Value = "Act Cav"
+        .Range("I1").Value = "Cycle Time"
+        .Range("J1").Value = "Piece Weight"
+        .Range("K1").Value = "Shot Weight"
+        .Range("L1").Value = "Pcs/Hour"
+        .Range("M1").Value = "Capacidad"
+        .Range("M2").Formula = "=IFNA(IF(LEFT(D2,1)=""N"",L2*19.83*7,IFS(LEFT(D2,1)=""F"", (3600/I2)*G2*24*7*0.9, LEFT(D2,1)=""S"", (3600/I2)*G2*24*7*0.9, LEFT(D2,1)=""J"", (3600/I2)*G2*24*7*0.9)),0)"
+        .Range("N1").Value = "Ensamble"
+        .Range("N2").Formula = "=IF(LEFT(A2,2)=""72"",IF(COUNTIF(B:B,B2)>1,""COMPARTE"","" ""),""-"")"
+    End With
+
+    vLstRen = wsLF.Cells(wsLF.Rows.Count, "A").End(xlUp).Row
+
+    If vLstRen > 2 Then
+        wsLF.Range("M2:N2").AutoFill Destination:=wsLF.Range("M2:N" & vLstRen), Type:=xlFillDefault
+
+        ' Ordenar por columna C (DIE)
+        With wsLF.Sort
+            .SortFields.Clear
+            .SortFields.Add Key:=wsLF.Range("C2:C" & vLstRen), _
+                SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+            .SetRange wsLF.Range("A1:N" & vLstRen)
+            .Header = xlYes
+            .MatchCase = False
+            .Orientation = xlTopToBottom
+            .Apply
+        End With
+    End If
+
+    Me.img_PalomaLoadFactor.Visible = True
+    Me.Repaint
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Error en LoadFactor: " & Err.Description, vbCritical
+End Sub
+
+' =====================================================================
+' PROCESAR ITEM MASTER - OPTIMIZADO
+' =====================================================================
+Private Sub ProcesarItemMaster(vPlan As String, rutaArchivos As String)
+    On Error GoTo ErrorHandler
+
+    Dim wsIM As Worksheet
+    Dim vArchivo As String
+
+    Set wsIM = Sheets("Item Master")
+    wsIM.Visible = True
+    wsIM.Activate
+
+    vArchivo = buscaArchivo("ItemMaster")
+    If Dir(rutaArchivos & vArchivo) = "" Then
+        MsgBox "La tabla de ItemMaster no existe", vbInformation
+        Exit Sub
+    End If
+
+    If wsIM.AutoFilterMode Then wsIM.AutoFilterMode = False
+    wsIM.Range("A1:J1048576").ClearContents
+
+    Call traeInformacionItemMaster(vPlan)
+    Workbooks(vPlan).Activate
+
+    ' Configurar encabezados
+    With wsIM
+        .Range("A1").Value = "PartNo"
+        .Range("B1").Value = "Description"
+        .Range("C1").Value = "Dep"
+        .Range("D1").Value = "Line"
+        .Range("E1").Value = "PLN"
+        .Range("F1").Value = "Type"
+        .Range("G1").Value = "Flg/Ord"
+        .Range("H1").Value = "Unit/Bag"
+        .Range("I1").Value = "Unit/Poly"
+        .Range("J1").Value = "Unit/Box"
+    End With
+
+    Me.img_PalomaItemMaster.Visible = True
+    Me.Repaint
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Error en ItemMaster: " & Err.Description, vbCritical
+End Sub
+
+' =====================================================================
+' PROCESAR INVENTARIO FG - OPTIMIZADO
+' =====================================================================
+Private Sub ProcesarInventarioFG(vPlan As String, rutaArchivos As String)
+    On Error GoTo ErrorHandler
+
+    Dim wsInvFG As Worksheet
+    Dim vArchivo As String
+
+    Set wsInvFG = Sheets("Inventario FG")
+    wsInvFG.Visible = True
+    wsInvFG.Activate
+
+    vArchivo = buscaArchivo("InvLocWIPFG")
+    If Dir(rutaArchivos & vArchivo) = "" Then
+        MsgBox "La tabla de InvLocWIPFG no existe", vbInformation
+        Exit Sub
+    End If
+
+    If wsInvFG.AutoFilterMode Then wsInvFG.AutoFilterMode = False
+    wsInvFG.Range("A2:O1048576").ClearContents
+
+    Call traeInformacionInventarioFG(vPlan)
+    Workbooks(vPlan).Activate
+
+    Me.img_PalomaInventarioFG.Visible = True
+    Me.Repaint
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Error en InventarioFG: " & Err.Description, vbCritical
+End Sub
+
+' =====================================================================
+' PROCESAR CAPACIDADES - OPTIMIZADO
+' =====================================================================
+Private Sub ProcesarCapacidades(vPlan As String)
+    On Error GoTo ErrorHandler
+
+    Dim wb As Workbook
+    Dim wsCap As Worksheet
+
+    If Application.Workbooks.Count = 0 Then
+        MsgBox "No hay libros abiertos.", vbExclamation
+        Exit Sub
+    End If
+
+    Set wb = Application.ActiveWorkbook
+
+    If wb.ProtectStructure Then
+        MsgBox "El libro está protegido (estructura). Desprotégelo para crear hojas.", vbExclamation
+        Exit Sub
+    End If
+
+    Set wsCap = GetOrCreateSheet(wb, "Capacidades")
+
+    With wsCap
+        If .Visible <> xlSheetVisible Then .Visible = xlSheetVisible
+        If .AutoFilterMode Then .AutoFilterMode = False
+        .Range("A2:O" & .Rows.Count).ClearContents
+        .Activate
+    End With
+
+    Call traeInformacionCapacidades(vPlan)
+
+    Me.img_PalomaCapacidades.Visible = True
+    Me.Repaint
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "Error en Capacidades: " & Err.Description, vbCritical
+End Sub
+
+' =====================================================================
+' FUNCIONES HELPER
+' =====================================================================
 Private Function GetOrCreateSheet(ByVal wb As Workbook, ByVal baseName As String) As Worksheet
     Dim ws As Worksheet
 
-    ' Intentar obtenerla por nombre (case-insensitive)
     On Error Resume Next
     Set ws = wb.Worksheets(baseName)
     On Error GoTo 0
 
     If ws Is Nothing Then
-        ' No existe: crear al final
         Set ws = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
 
-        ' Intentar nombrar como "Capacidades"; si ya existe, usar sufijo de hora
         On Error Resume Next
         ws.Name = baseName
         If Err.Number <> 0 Then
             Err.Clear
-            ws.Name = baseName & "_" & Format(Now, "hhmmss")
+            ws.Name = baseName & "_" & Format$(Now, "hhmmss")
             MsgBox "Ya existía '" & baseName & "'. Se creó '" & ws.Name & "'.", vbInformation
         End If
         On Error GoTo 0
@@ -450,67 +533,58 @@ Private Function GetOrCreateSheet(ByVal wb As Workbook, ByVal baseName As String
         MsgBox "Se creó la hoja '" & ws.Name & "'.", vbInformation
     End If
 
-    ' Por si estaba VeryHidden
     If ws.Visible <> xlSheetVisible Then ws.Visible = xlSheetVisible
-
     Set GetOrCreateSheet = ws
 End Function
 
-' --- Helper: fuerza una columna a tipo fecha (detecta yyyymmdd, serial Excel, etc.)
 Private Sub ForzarFechaEnColumna(ws As Worksheet, ByVal col As String, ByVal lastRow As Long)
+    Dim state As ExcelState
     Dim r As Range, c As Range
     Dim s As String, y As Integer, m As Integer, d As Integer
     Dim digits As String, n As Double, nLng As Long
-    
+
     If lastRow < 2 Then Exit Sub
+
+    state = SaveExcelState()
+    OptimizeExcelPerformance
+
+    On Error GoTo Cleanup
+
     Set r = ws.Range(col & "2:" & col & lastRow)
-    
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    Application.Calculation = xlCalculationManual
-    
-    On Error GoTo fin
+
     For Each c In r.Cells
         s = Trim$(CStr(c.Value2))
-        If Len(s) = 0 Then GoTo siguiente
-        
-        ' Normaliza separadores
-        s = Replace(Replace(Replace(s, "-", ""), "/", ""), ".", "")
-        digits = s
-        
-        If IsNumeric(digits) Then
-            ' Caso 1: yyyymmdd (8 dígitos)
-            If Len(digits) = 8 Then
-                y = CInt(Left$(digits, 4))
-                m = CInt(Mid$(digits, 5, 2))
-                d = CInt(Right$(digits, 2))
-                If y >= 1900 And m >= 1 And m <= 12 And d >= 1 And d <= 31 Then
-                    c.Value = DateSerial(y, m, d)
-                    GoTo siguiente
+        If Len(s) > 0 Then
+            s = Replace$(Replace$(Replace$(s, "-", ""), "/", ""), ".", "")
+            digits = s
+
+            If IsNumeric(digits) Then
+                If Len(digits) = 8 Then
+                    y = CInt(Left$(digits, 4))
+                    m = CInt(Mid$(digits, 5, 2))
+                    d = CInt(Right$(digits, 2))
+                    If y >= 1900 And m >= 1 And m <= 12 And d >= 1 And d <= 31 Then
+                        c.Value = DateSerial(y, m, d)
+                        GoTo NextCell
+                    End If
+                End If
+
+                n = Val(digits)
+                nLng = CLng(n)
+                If nLng >= 30000 And nLng <= 60000 Then
+                    c.Value = nLng
+                    GoTo NextCell
                 End If
             End If
-            ' Caso 2: serial Excel (p.ej. 45234)
-            n = Val(digits)
-            nLng = CLng(n)
-            If nLng >= 30000 And nLng <= 60000 Then
-                c.Value = nLng
-                GoTo siguiente
-            End If
+
+            On Error Resume Next
+            c.Value = CDate(c.Value)
+            On Error GoTo 0
         End If
-        
-        ' Último intento: conversión genérica
-        On Error Resume Next
-        c.Value = CDate(c.Value)
-        On Error GoTo 0
-siguiente:
+NextCell:
     Next c
-    
-fin:
+
+Cleanup:
     r.NumberFormat = "mm/dd/yyyy"
-    Application.Calculation = xlCalculationAutomatic
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
+    RestoreExcelState state
 End Sub
-
-
-
