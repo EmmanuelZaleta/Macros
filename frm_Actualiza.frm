@@ -5,7 +5,6 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frm_Actualiza
    ClientLeft      =   120
    ClientTop       =   468
    ClientWidth     =   9180
-   OleObjectBlob   =   "frm_Actualiza.frx":0000
    StartUpPosition =   1  'CenterOwner
 End
 Attribute VB_Name = "frm_Actualiza"
