@@ -32,7 +32,7 @@ Private Sub btn_Salir_Click()
 End Sub
 
 Private Sub lbl_Actualizar_Click()
-    
+
     Dim vLstRen As Long
     Dim vPlan As String
     Dim rutaArchivos  As String
@@ -40,14 +40,27 @@ Private Sub lbl_Actualizar_Click()
     Dim ultimaFila As Long
     Dim rutaCompleta As String
 
+    ' === OPTIMIZACION: Variables para rendimiento ===
+    Dim prevCalc As XlCalculation, prevScreen As Boolean, prevEvents As Boolean
+
     On Error GoTo MDE
-    
+
     rutaArchivos = ThisWorkbook.Sheets("Macro").Range("B1").Value
-    
     vPlan = ActiveWorkbook.Name
+
+    ' === OPTIMIZACION: Desactivar actualizaciones al INICIO ===
+    prevCalc = Application.Calculation
+    prevScreen = Application.ScreenUpdating
+    prevEvents = Application.EnableEvents
     Application.Calculation = xlCalculationManual
-' === Flex Plan - Selección de hoja solamente ===
-' === Flex Plan - Selección de hoja solamente ===
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+
+    ' === OPTIMIZACION: Actualizar UI sin bloquear ===
+    Me.Repaint
+    DoEvents
+' === Flex Plan - Selecciï¿½n de hoja solamente ===
+' === Flex Plan - Selecciï¿½n de hoja solamente ===
 If Me.chk_FlexPlan.Value Then
 
     Dim vFlexPlan As String
@@ -55,9 +68,8 @@ If Me.chk_FlexPlan.Value Then
     Dim frm_HojaFlex As New frm_SeleccionDeHojas
 
     Me.img_PalomaFlexPlan.Visible = True
-    Me.Repaint
+    DoEvents  ' === OPTIMIZACION: No bloquear UI ===
 
-  
 End If
 
     
@@ -108,7 +120,7 @@ If Me.chk_Ordenes.Value Then
 
         If Not fechaValida Then GoTo errorOrdenstats
 
-        ' ? Fecha válida, continuar con carga
+        ' ? Fecha vï¿½lida, continuar con carga
         ' Call traeInformacionOrdenes(vPlan, fecha)
         
         Call CargarOrderStat_DesdeUNC_Hasta(vPlan, fecha)
@@ -155,7 +167,7 @@ End If
                  
                 
         Else
-            MsgBox "La tabla de Órdenes no tiene datos suficientes.", vbExclamation
+            MsgBox "La tabla de ï¿½rdenes no tiene datos suficientes.", vbExclamation
         End If
         
         
@@ -163,11 +175,11 @@ End If
 
 
         Me.img_PalomaOrdenes.Visible = True
-        Me.Repaint
+        DoEvents  ' === OPTIMIZACION: No bloquear UI ===
         GoTo continuarOrdenstats
 
     Else
-        MsgBox "No se encontró el archivo de Órdenes.", vbInformation
+        MsgBox "No se encontrï¿½ el archivo de ï¿½rdenes.", vbInformation
         GoTo errorOrdenstats
     End If
 
@@ -192,7 +204,7 @@ End If
                
                 vLstRen = Range("A65536").End(xlUp).Row
                 Me.img_PalomaInvLocWIP.Visible = True
-                Me.Repaint
+                DoEvents  ' === OPTIMIZACION: No bloquear UI ===
            '     Inv Location    Box Unit    Part#   Inj.Date Min    Dept    Type    Flag Ord
 
             Range("A1").Value = "Inv Location"
@@ -212,9 +224,13 @@ End If
             
           
             vLstRen = Range("A65536").End(xlUp).Row
+            ' === OPTIMIZACION: FillDown mï¿½s rï¿½pido que AutoFill ===
             If vLstRen > 2 Then
-                Range("H2:I2").AutoFill Destination:=Range("H2:I" & vLstRen), Type:=xlFillDefault
+                Range("H2:I2").Copy
+                Range("H3:I" & vLstRen).PasteSpecial xlPasteFormulas
+                Application.CutCopyMode = False
             End If
+            DoEvents  ' === OPTIMIZACION: No bloquear UI ===
         Else
             MsgBox "La tabla de InvLocWIP no existe", vbInformation
         End If
@@ -238,7 +254,7 @@ If Me.chk_LoadFactor.Value Then
     NumeroAValor "A", "2"
 
     Me.img_PalomaLoadFactor.Visible = True
-    Me.Repaint
+    DoEvents  ' === OPTIMIZACION: No bloquear UI ===
 
     ' Encabezados
     Range("A1").Value = "PartNo"
@@ -257,12 +273,14 @@ If Me.chk_LoadFactor.Value Then
             Range("M2").Formula = "=IFNA(IF(LEFT(D2,1)=""N"",L2*19.83*7,IFS(LEFT(D2,1)=""F"", (3600/I2)*G2*24*7*0.9, LEFT(D2,1)=""S"", (3600/I2)*G2*24*7*0.9, LEFT(D2,1)=""J"", (3600/I2)*G2*24*7*0.9)),0)"
     Range("N1").Value = "Ensamble"
         Range("N2").Formula = "=IF(LEFT(A2,2)=""72"",IF(COUNTIF(B:B,B2)>1,""COMPARTE"","" ""),""-"")"
-    ' Última fila con datos
+    ' ï¿½ltima fila con datos
     vLstRen = Range("A65536").End(xlUp).Row
 
-    ' Aplicar fórmulas
+    ' === OPTIMIZACION: FillDown es mï¿½s rï¿½pido que AutoFill ===
     If vLstRen > 2 Then
-        Range("M2:N2").AutoFill Destination:=Range("M2:N" & vLstRen), Type:=xlFillDefault
+        Range("M2:N2").Copy
+        Range("M3:N" & vLstRen).PasteSpecial xlPasteFormulas
+        Application.CutCopyMode = False
     End If
 
     ' Ordenar por columna C (DIE)
@@ -291,7 +309,7 @@ End If
                 traeInformacionItemMaster vPlan
                 Workbooks(vPlan).Activate
                 Me.img_PalomaItemMaster.Visible = True
-                Me.Repaint
+                DoEvents  ' === OPTIMIZACION: No bloquear UI ===
             Range("A1").Value = "PartNo"
             Range("B1").Value = "Description"
             Range("C1").Value = "Dep"
@@ -320,9 +338,9 @@ End If
                 'queryInvLocWip
                 traeInformacionInventarioFG vPlan
                 Workbooks(vPlan).Activate
-                
+
                 Me.img_PalomaInventarioFG.Visible = True
-                Me.Repaint
+                DoEvents  ' === OPTIMIZACION: No bloquear UI ===
            '     Inv Location    Box Unit    Part#   Inj.Date Min    Dept    Type    Flag Ord
 
                 
@@ -341,17 +359,17 @@ If Me.chk_Capacidades.Value Then
     Dim wsCap As Worksheet
 
 
-    ' === 1) Tomar el libro ACTIVO (no el que contiene el código) ===
+    ' === 1) Tomar el libro ACTIVO (no el que contiene el cï¿½digo) ===
     If Application.Workbooks.Count = 0 Then
         MsgBox "No hay libros abiertos.", vbExclamation
         Exit Sub
     End If
-    Set wb = Application.ActiveWorkbook   ' <- clave para tu síntoma
+    Set wb = Application.ActiveWorkbook   ' <- clave para tu sï¿½ntoma
     vPlan = wb.Name
 
     ' === 2) Asegurar que la estructura del libro permita agregar hojas ===
     If wb.ProtectStructure Then
-        MsgBox "El libro está protegido (estructura). Desprotégelo para crear hojas.", vbExclamation
+        MsgBox "El libro estï¿½ protegido (estructura). Desprotï¿½gelo para crear hojas.", vbExclamation
         Exit Sub
     End If
 
@@ -371,22 +389,28 @@ If Me.chk_Capacidades.Value Then
 
     ' === 6) Marcar paloma ===
     Me.img_PalomaCapacidades.Visible = True
+    DoEvents  ' === OPTIMIZACION: No bloquear UI ===
 End If
 
-
-
+    ' === OPTIMIZACION: Restaurar configuraciï¿½n al FINAL ===
+    Application.Calculation = prevCalc
+    Application.ScreenUpdating = prevScreen
+    Application.EnableEvents = prevEvents
 
     MsgBox "Proceso Terminado Exitosamente", vbInformation
-    
+
     Unload Me
-    
-    Application.Calculation = xlCalculationAutomatic
-    
+
     Exit Sub
     
 MDE:
+    ' === OPTIMIZACION: Restaurar configuraciï¿½n en caso de error ===
+    On Error Resume Next
+    Application.Calculation = prevCalc
+    Application.ScreenUpdating = prevScreen
+    Application.EnableEvents = prevEvents
+    On Error GoTo 0
     MsgBox "Hubo un error en la aplicacion: " & Err.Description, vbInformation
-    Application.Calculation = xlCalculationAutomatic
     
 End Sub
 
@@ -458,11 +482,11 @@ Private Function GetOrCreateSheet(ByVal wb As Workbook, ByVal baseName As String
         If Err.Number <> 0 Then
             Err.Clear
             ws.Name = baseName & "_" & Format(Now, "hhmmss")
-            MsgBox "Ya existía '" & baseName & "'. Se creó '" & ws.Name & "'.", vbInformation
+            MsgBox "Ya existï¿½a '" & baseName & "'. Se creï¿½ '" & ws.Name & "'.", vbInformation
         End If
         On Error GoTo 0
 
-        MsgBox "Se creó la hoja '" & ws.Name & "'.", vbInformation
+        MsgBox "Se creï¿½ la hoja '" & ws.Name & "'.", vbInformation
     End If
 
     ' Por si estaba VeryHidden
@@ -483,18 +507,19 @@ Private Sub ForzarFechaEnColumna(ws As Worksheet, ByVal col As String, ByVal las
     Application.ScreenUpdating = False
     Application.EnableEvents = False
     Application.Calculation = xlCalculationManual
-    
+
     On Error GoTo fin
+    Dim cellCount As Long: cellCount = 0
     For Each c In r.Cells
         s = Trim$(CStr(c.Value2))
         If Len(s) = 0 Then GoTo siguiente
-        
+
         ' Normaliza separadores
         s = Replace(Replace(Replace(s, "-", ""), "/", ""), ".", "")
         digits = s
-        
+
         If IsNumeric(digits) Then
-            ' Caso 1: yyyymmdd (8 dígitos)
+            ' Caso 1: yyyymmdd (8 dï¿½gitos)
             If Len(digits) = 8 Then
                 y = CInt(Left$(digits, 4))
                 m = CInt(Mid$(digits, 5, 2))
@@ -512,12 +537,15 @@ Private Sub ForzarFechaEnColumna(ws As Worksheet, ByVal col As String, ByVal las
                 GoTo siguiente
             End If
         End If
-        
-        ' Último intento: conversión genérica
+
+        ' ï¿½ltimo intento: conversiï¿½n genï¿½rica
         On Error Resume Next
         c.Value = CDate(c.Value)
         On Error GoTo 0
 siguiente:
+        ' === OPTIMIZACION: DoEvents cada 100 celdas para no bloquear ===
+        cellCount = cellCount + 1
+        If cellCount Mod 100 = 0 Then DoEvents
     Next c
     
 fin:
