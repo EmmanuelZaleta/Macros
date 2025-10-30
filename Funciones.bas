@@ -2,14 +2,14 @@ Attribute VB_Name = "Funciones"
 Option Explicit
 
 ' =====================================================================
-' Configuración LoadFactor (único archivo)
+' Configuraciï¿½n LoadFactor (ï¿½nico archivo)
 ' =====================================================================
 Private Const LOADFACTOR_FILENAME As String = "ENSAMBLE_LOADFACTOR.TXT"
 
 ' Pon True si quieres EXCLUIR renglones cuyo campo(2) contenga "Troquel"
 Private Const EXCLUIR_TROQUEL As Boolean = False
 
-' ===== Config por defecto (edítalas si quieres) =====
+' ===== Config por defecto (edï¿½talas si quieres) =====
 Public Const DEFAULT_UNC As String = "\\Yazaki.local\na\elcom\chihuahua\Area_General\Materiales\Archivos Macro PCD\EP1\Extractor\"
 Public Const DEFAULT_FILENAME As String = "ENSAMBLE_ORDER_STAT_Query.TXT"
 
@@ -17,14 +17,14 @@ Private Function TieneTroquel(ByVal s As String) As Boolean
     TieneTroquel = (InStr(1, s, "Troquel", vbTextCompare) > 0)
 End Function
 
-' === Helpers numéricos / texto =======================================
+' === Helpers numï¿½ricos / texto =======================================
 Private Function Num(ByVal s As String) As Double
     ' Convierte a Double tolerando comas y texto extra
     Num = Val(Replace(Trim$(s), ",", "."))
 End Function
 
 Private Function EficienciaDeTexto(ByVal s As String) As Double
-    ' Extrae el número de un texto tipo "Efficiency 85%" -> 0.85
+    ' Extrae el nï¿½mero de un texto tipo "Efficiency 85%" -> 0.85
     Dim i As Long, c As String, buf As String, n As Double
     For i = 1 To Len(s)
         c = Mid$(s, i, 1)
@@ -52,13 +52,13 @@ Sub traeInformacionOrdenes(pPlan As String, txtFechaFin As String)
     Dim fechaConvertida As Date
     Dim wsDestino As Worksheet
 
-    ' Obtener ruta y archivo dinámico
+    ' Obtener ruta y archivo dinï¿½mico
     rutaArchivos = ThisWorkbook.Sheets("Macro").Range("B1").Value
     vArchivo = buscaArchivo("Ordenes")
     fullPath = rutaArchivos & vArchivo
 
     If Dir(fullPath) = "" Then
-        MsgBox "No se encontró el archivo: " & fullPath, vbCritical
+        MsgBox "No se encontrï¿½ el archivo: " & fullPath, vbCritical
         Exit Sub
     End If
 
@@ -87,13 +87,30 @@ Sub traeInformacionOrdenes(pPlan As String, txtFechaFin As String)
         Get #1, , binData
     Close #1
 
-    ' Normalizar saltos de línea: CRLF y CR -> LF
+    ' Normalizar saltos de lï¿½nea: CRLF y CR -> LF
     binData = Replace(binData, vbCrLf, vbLf)
     binData = Replace(binData, vbCr, vbLf)
     lineas = Split(binData, vbLf)
 
-    ' Procesar líneas (empezamos en 1 para saltar encabezado)
-    fila = 2
+    ' === OPTIMIZACION: Array para escritura masiva ===
+    Dim arrDatos() As Variant
+    Dim filaArr As Long, numRegistros As Long
+
+    ' === OPTIMIZACION: Desactivar actualizaciones ===
+    Dim prevCalc As XlCalculation, prevScreen As Boolean, prevEvents As Boolean
+    prevCalc = Application.Calculation
+    prevScreen = Application.ScreenUpdating
+    prevEvents = Application.EnableEvents
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+
+    ' Estimar tamaï¿½o del array
+    numRegistros = UBound(lineas) - 1
+    If numRegistros > 0 Then ReDim arrDatos(1 To numRegistros, 1 To 10)
+    filaArr = 0
+
+    ' Procesar lï¿½neas (empezamos en 1 para saltar encabezado)
     For i = 1 To UBound(lineas)
         If Trim(lineas(i)) <> "" Then
             campos = Split(lineas(i), "|")
@@ -103,45 +120,54 @@ Sub traeInformacionOrdenes(pPlan As String, txtFechaFin As String)
                     fechaETD = CLng(campos(3))
 
                     If fechaETD <= fechaFin Then
-                        With wsDestino
-                            .Cells(fila, "A").Value = campos(0)
-                            .Cells(fila, "B").Value = campos(1)
-                            .Cells(fila, "C").Value = QuitarCerosIzquierda(campos(2))
-                            .Cells(fila, "D").Value = DateSerial(Left(campos(3), 4), Mid(campos(3), 5, 2), Right(campos(3), 2))
-                            .Cells(fila, "E").Value = campos(4)
-                            .Cells(fila, "F").Value = campos(5)
-                            .Cells(fila, "G").Value = campos(6)
-                            .Cells(fila, "H").Value = campos(7)
-                            .Cells(fila, "I").Value = campos(8)
-                            .Cells(fila, "J").Value = campos(9)
-                        End With
-                        fila = fila + 1
+                        filaArr = filaArr + 1
+                        ' === OPTIMIZACION: Guardar en array (100x mï¿½s rï¿½pido) ===
+                        arrDatos(filaArr, 1) = campos(0)
+                        arrDatos(filaArr, 2) = campos(1)
+                        arrDatos(filaArr, 3) = QuitarCerosIzquierda(campos(2))
+                        arrDatos(filaArr, 4) = DateSerial(Left(campos(3), 4), Mid(campos(3), 5, 2), Right(campos(3), 2))
+                        arrDatos(filaArr, 5) = campos(4)
+                        arrDatos(filaArr, 6) = campos(5)
+                        arrDatos(filaArr, 7) = campos(6)
+                        arrDatos(filaArr, 8) = campos(7)
+                        arrDatos(filaArr, 9) = campos(8)
+                        arrDatos(filaArr, 10) = campos(9)
                     End If
                 End If
             End If
         End If
     Next i
 
-    ' Validación final
-    If fila <= 2 Then
-        MsgBox "No se encontraron registros válidos en el archivo para la fecha indicada.", vbExclamation
+    ' Validaciï¿½n final
+    If filaArr = 0 Then
+        MsgBox "No se encontraron registros vï¿½lidos en el archivo para la fecha indicada.", vbExclamation
+        Application.Calculation = prevCalc
+        Application.ScreenUpdating = prevScreen
+        Application.EnableEvents = prevEvents
         Exit Sub
     End If
+
+    ' === OPTIMIZACION: Escritura masiva (una sola operaciï¿½n) ===
+    wsDestino.Range("A2").Resize(filaArr, 10).Value = arrDatos
 
     ' Ordenar por columna D (ETD)
     With wsDestino.Sort
         .SortFields.Clear
-        .SortFields.Add Key:=wsDestino.Range("D2:D" & fila - 1), _
+        .SortFields.Add Key:=wsDestino.Range("D2:D" & filaArr + 1), _
             SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
-        .SetRange wsDestino.Range("A1:J" & fila - 1)
+        .SetRange wsDestino.Range("A1:J" & filaArr + 1)
         .Header = xlYes
         .Apply
     End With
 
+    ' === OPTIMIZACION: Restaurar configuraciï¿½n ===
+    Application.Calculation = prevCalc
+    Application.ScreenUpdating = prevScreen
+    Application.EnableEvents = prevEvents
     Exit Sub
 
 formatoInvalido:
-    MsgBox "La fecha ingresada (" & txtFechaFin & ") no es válida. Usa el formato aaaammdd, por ejemplo: 20250424", vbCritical
+    MsgBox "La fecha ingresada (" & txtFechaFin & ") no es vï¿½lida. Usa el formato aaaammdd, por ejemplo: 20250424", vbCritical
 
 End Sub
 
@@ -189,7 +215,7 @@ Public Sub CargarOrderStatDesdeArchivo(pPlan As String, fullPath As String, _
     Dim i As Long, fila As Long, fnum As Integer
 
     If Dir(fullPath) = "" Then
-        MsgBox "No se encontró el archivo:" & vbCrLf & fullPath, vbCritical
+        MsgBox "No se encontrï¿½ el archivo:" & vbCrLf & fullPath, vbCritical
         Exit Sub
     End If
 
@@ -199,7 +225,7 @@ Public Sub CargarOrderStatDesdeArchivo(pPlan As String, fullPath As String, _
     If Len(startYYYYMMDD) > 0 Then dStart = ParseYYYYMMDD(startYYYYMMDD): hasStart = True
     If Len(endYYYYMMDD) > 0 Then dEnd = ParseYYYYMMDD(endYYYYMMDD): hasEnd = True
 
-    ' === Selección de hoja destino ===
+    ' === Selecciï¿½n de hoja destino ===
     Set wb = Workbooks(pPlan)
     Set ws = EnsureSheet(wb, "OrderStats")
 
@@ -219,6 +245,22 @@ Public Sub CargarOrderStatDesdeArchivo(pPlan As String, fullPath As String, _
     binData = Replace(binData, vbCr, vbLf)
     lineas = Split(binData, vbLf)
 
+    ' === OPTIMIZACION: Array para escritura masiva ===
+    Dim arrDatos() As Variant
+    Dim maxRows As Long, filaArr As Long
+    maxRows = UBound(lineas) - LBound(lineas) + 1
+    ReDim arrDatos(1 To maxRows, 1 To 11)
+    filaArr = 0
+
+    ' === OPTIMIZACION: Desactivar actualizaciones ===
+    Dim prevCalc As XlCalculation, prevScreen As Boolean, prevEvents As Boolean
+    prevCalc = Application.Calculation
+    prevScreen = Application.ScreenUpdating
+    prevEvents = Application.EnableEvents
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+
     fila = 2
     For i = LBound(lineas) To UBound(lineas)
         Dim ln As String: ln = Trim$(lineas(i))
@@ -235,6 +277,7 @@ Public Sub CargarOrderStatDesdeArchivo(pPlan As String, fullPath As String, _
                     Dim vPlnt As String, vMat As String, vFecha As Date
                     Dim vSched As Double, vIssued As Double, vPO As String, vDeliv As Double
                     Dim vFecha2 As Date
+                    Dim hoy As Date, limite As Date
 
                     vPlnt = "YZP" & Trim$(campos(1))
                     vMat = Trim$(campos(3))
@@ -249,33 +292,29 @@ Public Sub CargarOrderStatDesdeArchivo(pPlan As String, fullPath As String, _
                     If hasStart And vFecha < dStart Then GoTo SaltarFila
                     If hasEnd And vFecha > dEnd Then GoTo SaltarFila
 
-                    ' === Escribir fila ===
-                    With ws
-                        .Cells(fila, 1).Value = vPlnt
-                        .Cells(fila, 2).Value = vPlnt
-                        .Cells(fila, 3).Value = "'" & vMat                   ' Mantiene como texto
-                        .Cells(fila, 4).Value = vFecha2  ' ETD
-                        .Cells(fila, 5).Value = vFecha  ' ETA
-                        .Cells(fila, 6).Value = vSched
-                        .Cells(fila, 7).Value = vIssued
-                        .Cells(fila, 8).Value = vSched - vIssued             ' Remain = Qty - Shipped
-                        .Cells(fila, 9).Value = vPO
-                        .Cells(fila, 11).Value = vFecha2 ' ETD
-                        Dim hoy As Date, limite As Date
-                        hoy = Date
-                        limite = hoy + 7   ' Ejemplo: 7 días adelante, reemplázalo por lo que uses como lv_datu2
-                        
-                        If vFecha >= hoy And vFecha <= limite Then
-                            .Cells(fila, 10).Value = "O"  ' Orden actual (Open)
-                        ElseIf vFecha > limite Then
-                            .Cells(fila, 10).Value = "F"  ' Futura
-                        ElseIf vFecha < hoy Then
-                            .Cells(fila, 10).Value = "P"  ' Pasada
-                        End If
+                    ' === OPTIMIZACION: Guardar en array ===
+                    filaArr = filaArr + 1
+                    arrDatos(filaArr, 1) = vPlnt
+                    arrDatos(filaArr, 2) = vPlnt
+                    arrDatos(filaArr, 3) = "'" & vMat
+                    arrDatos(filaArr, 4) = vFecha2
+                    arrDatos(filaArr, 5) = vFecha
+                    arrDatos(filaArr, 6) = vSched
+                    arrDatos(filaArr, 7) = vIssued
+                    arrDatos(filaArr, 8) = vSched - vIssued
+                    arrDatos(filaArr, 9) = vPO
 
-                        ' Formatos específicos
-                        .Cells(fila, 3).NumberFormat = "General"
-                    End With
+                    hoy = Date
+                    limite = hoy + 7
+                    If vFecha >= hoy And vFecha <= limite Then
+                        arrDatos(filaArr, 10) = "O"
+                    ElseIf vFecha > limite Then
+                        arrDatos(filaArr, 10) = "F"
+                    ElseIf vFecha < hoy Then
+                        arrDatos(filaArr, 10) = "P"
+                    End If
+
+                    arrDatos(filaArr, 11) = vFecha2
                     fila = fila + 1
                 End If
             End If
@@ -284,22 +323,36 @@ SaltarFila:
         On Error GoTo 0
     Next i
 
-    If fila <= 2 Then
+    If filaArr = 0 Then
         Dim msg As String: msg = "No hubo filas dentro del rango."
         If hasStart Then msg = msg & vbCrLf & "Desde: " & Format$(dStart, "yyyy-mm-dd")
         If hasEnd Then msg = msg & vbCrLf & "Hasta: " & Format$(dEnd, "yyyy-mm-dd")
+        Application.Calculation = prevCalc
+        Application.ScreenUpdating = prevScreen
+        Application.EnableEvents = prevEvents
         MsgBox msg, vbExclamation
         Exit Sub
     End If
+
+    ' === OPTIMIZACION: Escritura masiva una sola vez ===
+    ws.Range("A2").Resize(filaArr, 11).Value = arrDatos
+
+    ' Aplicar formato a columna C
+    ws.Range("C2:C" & filaArr + 1).NumberFormat = "General"
 
     ' === Ajustes finales ===
     With ws
         .Columns("A:J").AutoFit
         If .AutoFilterMode Then .AutoFilterMode = False
-        .Range("A1:J" & fila - 1).AutoFilter
+        .Range("A1:J" & filaArr + 1).AutoFilter
     End With
 
-    MsgBox "Cargado Order Stat en 'OrderStatRaw' (" & (fila - 2) & " filas).", vbInformation
+    ' === OPTIMIZACION: Restaurar configuraciï¿½n ===
+    Application.Calculation = prevCalc
+    Application.ScreenUpdating = prevScreen
+    Application.EnableEvents = prevEvents
+
+    MsgBox "Cargado Order Stat en 'OrderStatRaw' (" & filaArr & " filas).", vbInformation
     
     ' ===== SEGUNDO ARCHIVO: ENSAMBLE_ORDER_STAT_Query2.TXT =====
 Dim p As Long, carpeta2 As String, fullPath2 As String
@@ -318,6 +371,9 @@ If Dir(fullPath2) <> "" Then
     binData = Replace(binData, vbCrLf, vbLf)
     binData = Replace(binData, vbCr, vbLf)
     lineas = Split(binData, vbLf)
+
+    ' === OPTIMIZACION: Redimensionar array para continuar agregando ===
+    ReDim Preserve arrDatos(1 To maxRows + UBound(lineas), 1 To 11)
 
     For i = LBound(lineas) To UBound(lineas)
         Dim ln2 As String: ln2 = Trim$(lineas(i))
@@ -374,27 +430,27 @@ If Dir(fullPath2) <> "" Then
                     vDoc = Trim$(campos(8))
                     vSold = Trim$(campos(9))
 
-                    With ws
-                        .Cells(fila, 1).Value = vCust
-                        .Cells(fila, 2).Value = vPlnt2
-                        .Cells(fila, 3).Value = "'" & vMat2
-                        .Cells(fila, 4).Value = vGI
-                        .Cells(fila, 5).Value = vDeliv2
-                        .Cells(fila, 6).Value = vQty
-                        .Cells(fila, 7).Value = vShip
-                        .Cells(fila, 8).Value = vRemain
-                        .Cells(fila, 9).Value = vDoc
-                        .Cells(fila, 11).Value = vGI
-                        If vFecha >= hoy And vFecha <= limite Then
-                            .Cells(fila, 10).Value = "O"  ' Orden actual (Open)
-                        ElseIf vFecha > limite Then
-                            .Cells(fila, 10).Value = "F"  ' Futura
-                        ElseIf vFecha < hoy Then
-                            .Cells(fila, 10).Value = "P"  ' Pasada
-                        End If
+                    ' === OPTIMIZACION: Guardar en array ===
+                    filaArr = filaArr + 1
+                    arrDatos(filaArr, 1) = vCust
+                    arrDatos(filaArr, 2) = vPlnt2
+                    arrDatos(filaArr, 3) = "'" & vMat2
+                    arrDatos(filaArr, 4) = vGI
+                    arrDatos(filaArr, 5) = vDeliv2
+                    arrDatos(filaArr, 6) = vQty
+                    arrDatos(filaArr, 7) = vShip
+                    arrDatos(filaArr, 8) = vRemain
+                    arrDatos(filaArr, 9) = vDoc
 
-                        .Cells(fila, 3).NumberFormat = "General"
-                    End With
+                    If vGI >= hoy And vGI <= limite Then
+                        arrDatos(filaArr, 10) = "O"
+                    ElseIf vGI > limite Then
+                        arrDatos(filaArr, 10) = "F"
+                    ElseIf vGI < hoy Then
+                        arrDatos(filaArr, 10) = "P"
+                    End If
+
+                    arrDatos(filaArr, 11) = vGI
                     fila = fila + 1
                 End If
             End If
@@ -402,6 +458,12 @@ If Dir(fullPath2) <> "" Then
 Saltar2:
         On Error GoTo 0
     Next i
+
+    ' === OPTIMIZACION: Escritura masiva del segundo archivo ===
+    If filaArr > 0 Then
+        ws.Range("A2").Resize(filaArr, 11).Value = arrDatos
+        ws.Range("C2:C" & filaArr + 1).NumberFormat = "General"
+    End If
 End If
 
 End Sub
@@ -447,14 +509,14 @@ End Function
 Private Function ParseYYYYMMDD(ByVal s As String) As Date
     Dim y As Integer, m As Integer, d As Integer
     s = Trim$(s)
-    If Len(s) <> 8 Or Not IsNumeric(s) Then Err.Raise 5, , "Fecha inválida (yyyymmdd): " & s
+    If Len(s) <> 8 Or Not IsNumeric(s) Then Err.Raise 5, , "Fecha invï¿½lida (yyyymmdd): " & s
     y = CInt(Left$(s, 4))
     m = CInt(Mid$(s, 5, 2))
     d = CInt(Right$(s, 2))
     ParseYYYYMMDD = DateSerial(y, m, d)
 End Function
 ' =====================================================================
-' LOAD FACTOR (Sólo ENSAMBLE_LOADFACTOR.TXT) con Capacidad
+' LOAD FACTOR (Sï¿½lo ENSAMBLE_LOADFACTOR.TXT) con Capacidad
 ' =====================================================================
 Sub TraeInformacionLoadFactor(pPlan As String)
 
@@ -474,13 +536,13 @@ Sub TraeInformacionLoadFactor(pPlan As String)
     wsDestino.Cells.ClearContents
     fila = 2
 
-    ' Encabezados (según tu hoja)
+    ' Encabezados (segï¿½n tu hoja)
     wsDestino.Range("A1:O1").Value = Array( _
         "PartNo", "CONTROL", "DIE", "Dep", "Group Code", "Eng Lev", _
         "Std Cav", "Act Cav", "Cycle Time", "Piece Weight", "Shot Weight", _
         "Pcs/Hour", "Capacidad", "Ensamble", "")
 
-    ' Único archivo
+    ' ï¿½nico archivo
     vArchivoLF = LOADFACTOR_FILENAME
 
     ' Procesar archivo
@@ -505,7 +567,7 @@ Sub LlamaArchivo(fullPath As String, wsDestino As Worksheet, ByRef fila As Long,
     Dim eff As Double, ct As Double, actCav As Double
 
     If Dir(fullPath) = "" Then
-        MsgBox "No se encontró: " & fullPath, vbCritical
+        MsgBox "No se encontrï¿½: " & fullPath, vbCritical
         Exit Sub
     End If
 
@@ -522,10 +584,25 @@ Sub LlamaArchivo(fullPath As String, wsDestino As Worksheet, ByRef fila As Long,
         End If
     End If
 
-    ' Normalizar saltos de línea
+    ' Normalizar saltos de lï¿½nea
     binData = Replace(binData, vbCrLf, vbLf)
     binData = Replace(binData, vbCr, vbLf)
     lineas = Split(binData, vbLf)
+
+    ' === OPTIMIZACION: Array para escritura masiva ===
+    Dim arrDatos() As Variant
+    Dim maxRows As Long, filaArr As Long
+    maxRows = UBound(lineas)
+    If maxRows > 0 Then ReDim arrDatos(1 To maxRows, 1 To 14)
+    filaArr = 0
+
+    ' === OPTIMIZACION: Desactivar actualizaciones (solo si no estï¿½n ya desactivadas) ===
+    Dim needRestore As Boolean
+    needRestore = Application.ScreenUpdating
+    If needRestore Then
+        Application.ScreenUpdating = False
+        Application.EnableEvents = False
+    End If
 
     ' Recorrer renglones (1..UBound) para saltar encabezado
     For i = 1 To UBound(lineas)
@@ -534,7 +611,7 @@ Sub LlamaArchivo(fullPath As String, wsDestino As Worksheet, ByRef fila As Long,
             If InStr(linea, "|") > 0 Then
                 campos = Split(linea, "|")
 
-                ' Asegurar columnas suficientes para cálculo (>=20 incluye Working Rate)
+                ' Asegurar columnas suficientes para cï¿½lculo (>=20 incluye Working Rate)
                 If UBound(campos) >= 20 Then
 
                     ' Filtro opcional de "Troquel" en campo(2)
@@ -543,7 +620,7 @@ Sub LlamaArchivo(fullPath As String, wsDestino As Worksheet, ByRef fila As Long,
                     partNo = QuitarCerosIzquierda(campos(0))
                     campoDie = Trim$(campos(2))
 
-                    ' Clave única por PartNo + DIE recortado a 5 (si aplica)
+                    ' Clave ï¿½nica por PartNo + DIE recortado a 5 (si aplica)
                     If Len(campoDie) > 5 Then
                         claveUnica = partNo & Left$(campoDie, 5)
                     Else
@@ -553,38 +630,34 @@ Sub LlamaArchivo(fullPath As String, wsDestino As Worksheet, ByRef fila As Long,
                     If Not dictUnicos.exists(claveUnica) Then
                         dictUnicos.Add claveUnica, vbNullString
 
-                        ' ---- Cálculo de Capacidad ----
-                        ' 1) Pcs/Hour si viene; si no, 3600/CycleTime * (ActCav si >0, si no 1)
+                        ' ---- Cï¿½lculo de Capacidad ----
                         If IsNumeric(campos(11)) Then
                             basePH = Num(campos(11))
                         Else
-                            ct = Num(campos(9))                  ' Cycle Time
-                            actCav = Num(campos(8))              ' Act Cav
+                            ct = Num(campos(9))
+                            actCav = Num(campos(8))
                             If actCav <= 0 Then actCav = 1
                             If ct > 0 Then basePH = (3600# / ct) * actCav Else basePH = 0
                         End If
-                        ' 2) Eficiencia desde "Working Rate" (col 20, ej. "Efficiency 85%")
                         eff = EficienciaDeTexto(campos(20))
-                        ' 3) Capacidad final
                         cap = basePH * eff
 
-                        ' --- Mapeo de columnas ---
-                        With wsDestino
-                            .Cells(fila, "A").Value = partNo                 ' PartNo (0)
-                            .Cells(fila, "B").Value = campos(3)              ' Control
-                            .Cells(fila, "C").Value = campoDie               ' Die
-                            .Cells(fila, "D").Value = campos(4)              ' Dep
-                            .Cells(fila, "E").Value = campos(5)              ' Group Code
-                            .Cells(fila, "F").Value = campos(6)              ' Eng Lev
-                            .Cells(fila, "G").Value = campos(7)              ' Std Cav
-                            .Cells(fila, "H").Value = campos(8)              ' Act Cav
-                            .Cells(fila, "I").Value = campos(9)              ' Cycle Time
-                            .Cells(fila, "J").Value = campos(10)             ' Piece Weight
-                            .Cells(fila, "K").Value = ""                     ' Shot Weight (si aplica)
-                            .Cells(fila, "L").Value = basePH                 ' Pcs/Hour base
-                            .Cells(fila, "M").Value = cap                    ' Capacidad
-                            .Cells(fila, "N").Value = ""                     ' Ensamble (placeholder)
-                        End With
+                        ' === OPTIMIZACION: Guardar en array ===
+                        filaArr = filaArr + 1
+                        arrDatos(filaArr, 1) = partNo
+                        arrDatos(filaArr, 2) = campos(3)
+                        arrDatos(filaArr, 3) = campoDie
+                        arrDatos(filaArr, 4) = campos(4)
+                        arrDatos(filaArr, 5) = campos(5)
+                        arrDatos(filaArr, 6) = campos(6)
+                        arrDatos(filaArr, 7) = campos(7)
+                        arrDatos(filaArr, 8) = campos(8)
+                        arrDatos(filaArr, 9) = campos(9)
+                        arrDatos(filaArr, 10) = campos(10)
+                        arrDatos(filaArr, 11) = ""
+                        arrDatos(filaArr, 12) = basePH
+                        arrDatos(filaArr, 13) = cap
+                        arrDatos(filaArr, 14) = ""
 
                         fila = fila + 1
                     End If
@@ -594,10 +667,21 @@ Sub LlamaArchivo(fullPath As String, wsDestino As Worksheet, ByRef fila As Long,
 siguiente:
     Next i
 
+    ' === OPTIMIZACION: Escritura masiva ===
+    If filaArr > 0 Then
+        wsDestino.Range("A" & fila - filaArr + 1).Resize(filaArr, 14).Value = arrDatos
+    End If
+
     ' Formato visual
     If fila > 2 Then
         wsDestino.Rows(1).Font.Bold = True
         wsDestino.Columns("A:O").AutoFit
+    End If
+
+    ' === OPTIMIZACION: Restaurar si fue necesario ===
+    If needRestore Then
+        Application.ScreenUpdating = True
+        Application.EnableEvents = True
     End If
 
 End Sub
@@ -624,7 +708,7 @@ Sub traeInformacionItemMaster(pPlan As String)
     archivo = rutaArchivo & "ENSAMBLE_ITEMMASTER.TXT"
 
     If Dir(archivo) = "" Then
-        MsgBox "No se encontró el archivo: " & archivo, vbCritical
+        MsgBox "No se encontrï¿½ el archivo: " & archivo, vbCritical
         Exit Sub
     End If
 
@@ -639,17 +723,17 @@ Sub traeInformacionItemMaster(pPlan As String)
         Get #1, , binData
     Close #1
 
-    ' Normalizar saltos de línea
+    ' Normalizar saltos de lï¿½nea
     binData = Replace(binData, vbCrLf, vbLf)
     binData = Replace(binData, vbCr, vbLf)
     lineas = Split(binData, vbLf)
 
-    ' Procesar líneas (empezando en 1 para saltar encabezado)
+    ' Procesar lï¿½neas (empezando en 1 para saltar encabezado)
     For i = 1 To UBound(lineas)
         If Trim(lineas(i)) <> "" Then
             datos = Split(lineas(i), "|")
             If UBound(datos) >= 8 Then
-                ' Lógica de modificación
+                ' Lï¿½gica de modificaciï¿½n
                 Select Case UCase(Left(Trim(datos(2)), 1))
                     Case "E": valorModC = "3"
                     Case "F": valorModC = "2"
@@ -689,7 +773,7 @@ manejaError:
 End Sub
 
 ' =====================================================================
-' HELPERS BÁSICOS
+' HELPERS Bï¿½SICOS
 ' =====================================================================
 Function buscaArchivo(pNombre As String) As String
     Dim vLstRen As Long
@@ -734,7 +818,7 @@ Sub traeInformacionFlexPlan(pPlan As String)
     Dim minFecha As Date, maxFecha As Date
     Dim idx As Long
 
-    ' Inicialización
+    ' Inicializaciï¿½n
     Set dictProyeccion = CreateObject("Scripting.Dictionary")
     Set dictPartes = CreateObject("Scripting.Dictionary")
     colBase = 3 ' Columna C en adelante son las semanas
@@ -742,7 +826,7 @@ Sub traeInformacionFlexPlan(pPlan As String)
     ' Ruta del archivo fuente
     fullPath = "\\Yazaki.local\na\elcom\chihuahua\Area_General\Materiales\Archivos Macro PCD\EP1\Extractor\ENSAMBLE_ORDER_STAT.TXT"
 
-    ' Leer archivo completo como texto y normalizar saltos de línea
+    ' Leer archivo completo como texto y normalizar saltos de lï¿½nea
     Open fullPath For Binary As #1
         binData = Space$(LOF(1))
         Get #1, , binData
@@ -752,11 +836,11 @@ Sub traeInformacionFlexPlan(pPlan As String)
     binData = Replace(binData, vbCr, vbLf)
     lineas = Split(binData, vbLf)
 
-    ' Detectar fechas mínima y máxima
+    ' Detectar fechas mï¿½nima y mï¿½xima
     minFecha = DateSerial(2099, 12, 31)
     maxFecha = DateSerial(2000, 1, 1)
 
-    For i = 1 To UBound(lineas) ' Saltamos encabezado (línea 0)
+    For i = 1 To UBound(lineas) ' Saltamos encabezado (lï¿½nea 0)
         If Trim(lineas(i)) <> "" Then
             campos = Split(lineas(i), "|")
             If UBound(campos) >= 5 Then
@@ -769,7 +853,7 @@ Sub traeInformacionFlexPlan(pPlan As String)
         End If
     Next i
 
-    ' Ajustar a domingo más cercano
+    ' Ajustar a domingo mï¿½s cercano
     minFecha = minFecha - Weekday(minFecha, vbSunday) + 1
     maxFecha = maxFecha + (7 - Weekday(maxFecha, vbSunday))
 
@@ -867,7 +951,7 @@ Sub traeInformacionInventarioFG(pPlan As String)
     fullPath = rutaArchivos & vArchivo
 
     If Dir(fullPath) = "" Then
-        MsgBox "No se encontró el archivo: " & fullPath, vbCritical
+        MsgBox "No se encontrï¿½ el archivo: " & fullPath, vbCritical
         Exit Sub
     End If
 
@@ -876,7 +960,7 @@ Sub traeInformacionInventarioFG(pPlan As String)
     Set wsDestino = Workbooks(pPlan).Sheets("Inventario FG")
     wsDestino.Cells.ClearContents
 
-    ' Leer archivo como texto normalizando saltos de línea
+    ' Leer archivo como texto normalizando saltos de lï¿½nea
     Open fullPath For Binary As #1
         binData = Space$(LOF(1))
         Get #1, , binData
@@ -887,7 +971,7 @@ Sub traeInformacionInventarioFG(pPlan As String)
     lineas = Split(binData, vbLf)
 
     ' Agrupar datos
-    For i = 1 To UBound(lineas) ' Saltar encabezado (línea 0)
+    For i = 1 To UBound(lineas) ' Saltar encabezado (lï¿½nea 0)
         If Trim(lineas(i)) <> "" Then
             campos = Split(lineas(i), "|")
 
@@ -964,12 +1048,12 @@ Sub traeInformacionInvLocWIP(pPlan As String)
 
     ' Validar existencia de ambos archivos
     If Dir(fullPath) = "" Then
-        MsgBox "No se encontró el archivo: " & fullPath, vbCritical
+        MsgBox "No se encontrï¿½ el archivo: " & fullPath, vbCritical
         Exit Sub
     End If
 
     If Dir(fullPath2) = "" Then
-        MsgBox "No se encontró el archivo: " & fullPath2, vbCritical
+        MsgBox "No se encontrï¿½ el archivo: " & fullPath2, vbCritical
         Exit Sub
     End If
 
@@ -1047,8 +1131,8 @@ continuar2:
 ' === MANEJO DE ERRORES GENERAL ===
 errorHandler:
     MsgBox "ERROR - Fila: " & fila & vbCrLf & _
-           "Línea: " & linea2 & vbCrLf & _
-           "Descripción: " & Err.Description, vbCritical
+           "Lï¿½nea: " & linea2 & vbCrLf & _
+           "Descripciï¿½n: " & Err.Description, vbCritical
     On Error Resume Next
     Close #1
     Close #2
@@ -1057,7 +1141,7 @@ errorHandler:
 End Sub
 
 ' =====================================================================
-' DATASET LIMPIO LOADFACTOR (único archivo)
+' DATASET LIMPIO LOADFACTOR (ï¿½nico archivo)
 ' =====================================================================
 Sub ConstruirDatasetLimpioLoadFactor(ByRef dictDataset As Object)
 
@@ -1083,12 +1167,12 @@ Sub ConstruirDatasetLimpioLoadFactor(ByRef dictDataset As Object)
         Get #1, , binData
     Close #1
 
-    ' Normalizar saltos de línea
+    ' Normalizar saltos de lï¿½nea
     binData = Replace(binData, vbCrLf, vbLf)
     binData = Replace(binData, vbCr, vbLf)
     lineas = Split(binData, vbLf)
 
-    ' Procesar líneas (desde 1 para saltar encabezado)
+    ' Procesar lï¿½neas (desde 1 para saltar encabezado)
     For i = 1 To UBound(lineas)
         If Trim(lineas(i)) <> "" Then
             campos = Split(lineas(i), "|")
@@ -1104,7 +1188,7 @@ Sub ConstruirDatasetLimpioLoadFactor(ByRef dictDataset As Object)
                         campo2 = Trim(campos(2))
                     End If
 
-                    ' Clave única = PartNo + Die(recortado)
+                    ' Clave ï¿½nica = PartNo + Die(recortado)
                     claveUnica = campo0 & campo2
 
                     If Not dictDataset.exists(claveUnica) Then
@@ -1123,7 +1207,7 @@ Sub ConstruirDatasetLimpioLoadFactor(ByRef dictDataset As Object)
 End Sub
 
 ' =====================================================================
-' CAPACIDADES (usa sólo ENSAMBLE_LOADFACTOR.TXT + ItemMaster + BOM)
+' CAPACIDADES (usa sï¿½lo ENSAMBLE_LOADFACTOR.TXT + ItemMaster + BOM)
 ' =====================================================================
 Sub traeInformacionCapacidades(pPlan As String)
 
@@ -1193,11 +1277,11 @@ Sub traeInformacionCapacidades(pPlan As String)
             End If
         Next i
     Else
-        MsgBox "No se encontró el archivo: " & archivoItemMaster, vbCritical
+        MsgBox "No se encontrï¿½ el archivo: " & archivoItemMaster, vbCritical
         Exit Sub
     End If
 
-    ' === 2. Leer ÚNICO LoadFactor y calcular CAPACIDADES por PartNo ===
+    ' === 2. Leer ï¿½NICO LoadFactor y calcular CAPACIDADES por PartNo ===
     If Dir(archivoLF) <> "" Then
         Open archivoLF For Binary As #1
             binData = Space$(LOF(1))
@@ -1220,7 +1304,7 @@ Sub traeInformacionCapacidades(pPlan As String)
                     If Not dictUnicos.exists(claveUnica) Then
                         dictUnicos.Add claveUnica, ""
 
-                        ' ---- Capacidad por renglón (igual que en Load factor) ----
+                        ' ---- Capacidad por renglï¿½n (igual que en Load factor) ----
                         If IsNumeric(campos(11)) Then
                             basePH = Num(campos(11))
                         Else
@@ -1240,12 +1324,23 @@ Sub traeInformacionCapacidades(pPlan As String)
             End If
         Next i
     Else
-        MsgBox "No se encontró el archivo: " & archivoLF, vbCritical
+        MsgBox "No se encontrï¿½ el archivo: " & archivoLF, vbCritical
         Exit Sub
     End If
 
+    ' === OPTIMIZACION: Desactivar actualizaciones antes de abrir archivo ===
+    Dim prevCalc As XlCalculation, prevScreen As Boolean, prevEvents As Boolean, prevAlerts As Boolean
+    prevCalc = Application.Calculation
+    prevScreen = Application.ScreenUpdating
+    prevEvents = Application.EnableEvents
+    prevAlerts = Application.DisplayAlerts
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.DisplayAlerts = False
+
     ' === 3. Procesar BOM ===
-    Set wbOrigen = Workbooks.Open("\\Yazaki.local\na\elcom\chihuahua\Area_General\Materiales\Archivos Macro PCD\EP1\Extractor\BOM_SIN_EMPAQUE_FICR4700_1815.xlsx")
+    Set wbOrigen = Workbooks.Open("\\Yazaki.local\na\elcom\chihuahua\Area_General\Materiales\Archivos Macro PCD\EP1\Extractor\BOM_SIN_EMPAQUE_FICR4700_1815.xlsx", ReadOnly:=True)
     Set wsOrigen = wbOrigen.Sheets(1)
     Set wsDestino = Workbooks(pPlan).Sheets("Capacidades")
     wsDestino.Cells.ClearContents
@@ -1292,6 +1387,12 @@ SaltarFila:
 
     wbOrigen.Close SaveChanges:=False
 
+    ' === OPTIMIZACION: Restaurar configuraciï¿½n ===
+    Application.Calculation = prevCalc
+    Application.ScreenUpdating = prevScreen
+    Application.EnableEvents = prevEvents
+    Application.DisplayAlerts = prevAlerts
+
 End Sub
 
 ' =====================================================================
@@ -1313,11 +1414,11 @@ Public Sub CargarArchivoFlexPlanDesdeRuta(rutaBase As String)
     Set wbOrigen = Workbooks.Open(archivoCompleto, ReadOnly:=True)
     On Error GoTo 0
 
-    ' Si no existe, permitir selección manual
+    ' Si no existe, permitir selecciï¿½n manual
     If wbOrigen Is Nothing Then
         seleccionManual = Application.GetOpenFilename("Archivos Excel (*.xlsx), *.xlsx", , "Selecciona el archivo de Flex Plan")
         If seleccionManual = "False" Then
-            MsgBox "No se seleccionó ningún archivo.", vbExclamation
+            MsgBox "No se seleccionï¿½ ningï¿½n archivo.", vbExclamation
             Exit Sub
         End If
 
@@ -1334,7 +1435,7 @@ Public Sub CargarArchivoFlexPlanDesdeRuta(rutaBase As String)
     On Error GoTo 0
 
     If hojaOrigen Is Nothing Then
-        MsgBox "No se encontró la hoja 'Flex-plan' en el archivo seleccionado.", vbExclamation
+        MsgBox "No se encontrï¿½ la hoja 'Flex-plan' en el archivo seleccionado.", vbExclamation
         wbOrigen.Close SaveChanges:=False
         Exit Sub
     End If
@@ -1363,7 +1464,7 @@ Public Function WorksheetExists(sheetName As String, Optional wb As Workbook) As
 End Function
 
 
-' === "Vacío" robusto: "", Empty, espacios, tabs, NBSP, CR/LF, "" de fórmula.
+' === "Vacï¿½o" robusto: "", Empty, espacios, tabs, NBSP, CR/LF, "" de fï¿½rmula.
 Private Function EsVacioRobusto(ByVal v As Variant) As Boolean
     If IsError(v) Or IsEmpty(v) Then EsVacioRobusto = True: Exit Function
     Dim s As String
@@ -1377,7 +1478,7 @@ Private Function EsVacioRobusto(ByVal v As Variant) As Boolean
     EsVacioRobusto = (LenB(s) = 0)
 End Function
 
-' === Última fila real (no se confunde con filtros/formatos)
+' === ï¿½ltima fila real (no se confunde con filtros/formatos)
 Private Function ultimaFila(ws As Worksheet) As Long
     Dim c As Range
     On Error Resume Next
@@ -1393,7 +1494,7 @@ End Function
 ' === ACTUALIZADOR PRINCIPAL ===
 ' Actualiza Load Factor (col C) con Short Text (E) de MDMQ0400.
 ' Coincidencia:  (MDMQ0400.A, MDMQ0400.F)  <->  (LoadFactor.A, LoadFactor.N)
-' soloASVacio=True => solo filas donde AS se considere "vacío".
+' soloASVacio=True => solo filas donde AS se considere "vacï¿½o".
 Public Sub ActualizarLoadFactorDesdeMDMQ0400_Fast(ByVal pPlan As String, Optional ByVal soloASVacio As Boolean = True)
     Const COL_MATERIAL& = 1   ' A
     Const COL_SHORTTXT& = 5   ' E
@@ -1425,7 +1526,7 @@ Public Sub ActualizarLoadFactorDesdeMDMQ0400_Fast(ByVal pPlan As String, Optiona
     ruta = ThisWorkbook.Sheets("Macro").Range("B1").Value
     fullPath = "\\Yazaki.local\na\elcom\chihuahua\Area_General\Materiales\Archivos Macro PCD\EP1\Extractor\MDMQ0400.XLS"
     If Dir(fullPath) = "" Then fullPath = ruta & "MDMQ0400.xlsx"
-    If Dir(fullPath) = "" Then Err.Raise vbObjectError + 100, , "No se encontró MDMQ0400.xlsx (revisa Macro!B1 o la ruta fija)."
+    If Dir(fullPath) = "" Then Err.Raise vbObjectError + 100, , "No se encontrï¿½ MDMQ0400.xlsx (revisa Macro!B1 o la ruta fija)."
 
     ' --- abrir MDMQ0400
     Set wbM = Workbooks.Open(fullPath, ReadOnly:=True)
@@ -1488,7 +1589,7 @@ Public Sub ActualizarLoadFactorDesdeMDMQ0400_Fast(ByVal pPlan As String, Optiona
         End If
     Next i
 
-    ' --- volcado único a la hoja
+    ' --- volcado ï¿½nico a la hoja
     wsLF.Range("C1:C" & rFinLF).Value2 = arrLFC
 
 reporte:
